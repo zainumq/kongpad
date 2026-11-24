@@ -688,6 +688,26 @@ ol.wallet-hint {
   width: auto;
 }
 
+/* Token identicons — deterministic blockies-style icons (see TokenIcon.tsx). */
+.token-icon {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 25%;
+  overflow: hidden;
+}
+
+.token-cell {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.token-head-main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 /* Season badge — mirrors the "Season 2" gradient pill on ammora.org's hero. */
 .season-pill {
   display: inline-block;
