@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useWallet } from "./lib/wallet";
+import { getWcProjectId } from "./lib/walletconnect";
 import { shortAddress } from "./lib/giwa";
 import { Explorer, type EnrichedLaunch } from "./components/Explorer";
 import { LaunchStudio } from "./components/LaunchStudio";
@@ -8,6 +9,7 @@ import { FeeDashboard } from "./components/FeeDashboard";
 import { MyLaunches } from "./components/MyLaunches";
 import { RpcSettings } from "./components/RpcSettings";
 import { RpcStatusBanner } from "./components/RpcStatusBanner";
+import { WalletConnectSettings } from "./components/WalletConnectSettings";
 
 type Tab = "explore" | "launch" | "trade" | "fees" | "mine";
 
@@ -56,6 +58,9 @@ export default function App() {
             <>
               <span className={`chain-dot ${wallet.isCorrectChain ? "ok" : "bad"}`} />
               <span className="mono">{shortAddress(wallet.address ?? "")}</span>
+              {wallet.connectionType === "walletconnect" ? (
+                <span className="muted small">via WalletConnect</span>
+              ) : null}
               {!wallet.isCorrectChain ? (
                 <button type="button" className="btn btn-small btn-primary" onClick={() => void wallet.switchChain()}>
                   Switch to GIWA Sepolia
@@ -66,23 +71,33 @@ export default function App() {
               </button>
             </>
           ) : (
-            <button type="button" className="btn btn-primary" disabled={wallet.connecting} onClick={() => void wallet.connect()}>
-              {wallet.connecting ? "Connecting…" : "Connect wallet"}
-            </button>
+            <>
+              <button type="button" className="btn btn-primary" disabled={wallet.connecting} onClick={() => void wallet.connect()}>
+                {wallet.connecting ? "Connecting…" : "Connect wallet"}
+              </button>
+              {getWcProjectId() ? (
+                <button type="button" className="btn btn-ghost" disabled={wallet.connecting} onClick={() => void wallet.connectWalletConnect()}>
+                  {wallet.connecting ? "Connecting…" : "WalletConnect"}
+                </button>
+              ) : null}
+            </>
           )}
         </div>
       </header>
       {wallet.error ? <div className="error-box" role="alert">{wallet.error}</div> : null}
       {!wallet.hasProvider ? (
         <div className="notice">
-          No injected wallet detected. Install MetaMask or Rabby, then reload this page. Reads work without a wallet;
-          trading, launching and claiming need one.
+          No injected wallet detected. Install MetaMask or Rabby, then reload this page — or connect
+          a mobile wallet with WalletConnect (set it up in the WalletConnect panel below). Reads work
+          without a wallet; trading, launching and claiming need one.
         </div>
       ) : null}
 
       <RpcStatusBanner />
 
       <RpcSettings />
+
+      <WalletConnectSettings />
 
       <nav className="tabs" aria-label="Sections">
         {TABS.map((t) => (
