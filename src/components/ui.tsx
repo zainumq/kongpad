@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { explorerAddress, explorerTx, shortAddress } from "../lib/giwa";
+import type { ClassifiedWalletError } from "../lib/walletError";
 
 export function Card({ title, subtitle, children, actions }: {
   title: string;
@@ -50,6 +51,39 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
   return (
     <div className="error-box" role="alert">
       <span>{message}</span>
+      {onRetry ? (
+        <button type="button" className="btn btn-small" onClick={onRetry}>
+          Retry
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Wallet-action failure box: the classified message, concrete recovery
+ * steps for the failure kind, and a Retry button that re-triggers the
+ * same action. The no-response steps matter most — a popup that never
+ * appeared leaves a request queued in MetaMask, so the user must settle
+ * it before retrying, or the same transaction can be sent twice.
+ */
+export function WalletErrorBox({ error, onRetry }: { error: ClassifiedWalletError; onRetry?: () => void }) {
+  return (
+    <div className="wallet-error" role="alert">
+      <div className="error-box">
+        <span>{error.message}</span>
+      </div>
+      {error.kind === "no-response" ? (
+        <ol className="wallet-hint">
+          <li>Click the MetaMask icon in your browser toolbar — a pending request may be waiting there.</li>
+          <li>If a request is pending, confirm or reject it first, so retrying does not send the same transaction twice.</li>
+          <li>If no popup appears at all, reload the page and try again.</li>
+        </ol>
+      ) : error.kind === "rejected" ? (
+        <p className="wallet-hint">Nothing was sent. Retry whenever you are ready.</p>
+      ) : (
+        <p className="wallet-hint">If a transaction was submitted, check the explorer before retrying.</p>
+      )}
       {onRetry ? (
         <button type="button" className="btn btn-small" onClick={onRetry}>
           Retry
