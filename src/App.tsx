@@ -7,6 +7,7 @@ import { TradePanel } from "./components/TradePanel";
 import { FeeDashboard } from "./components/FeeDashboard";
 import { MyLaunches } from "./components/MyLaunches";
 import { RpcSettings } from "./components/RpcSettings";
+import { RpcStatusBanner } from "./components/RpcStatusBanner";
 
 type Tab = "explore" | "launch" | "trade" | "fees" | "mine";
 
@@ -78,6 +79,8 @@ export default function App() {
           trading, launching and claiming need one.
         </div>
       ) : null}
+
+      <RpcStatusBanner />
 
       <RpcSettings />
 
