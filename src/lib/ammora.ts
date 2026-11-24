@@ -48,21 +48,35 @@ import {
   WETH,
   getFinalizedBlock,
 } from "./giwa";
+import {
+  WALLET_FLOW_TIMEOUT_MS,
+  WALLET_REQUEST_TIMEOUT_MS,
+  classifyWalletError,
+  withWalletTimeout,
+} from "./walletError";
 
 export type { AmmoraV4ConfigSnapshot, AmmoraV4LaunchCurveState, AmmoraV4ExactInputQuote };
+// Re-exported so components keep a single import site for wallet errors.
+export {
+  WALLET_FLOW_TIMEOUT_MS,
+  WALLET_REQUEST_TIMEOUT_MS,
+  WalletTimeoutError,
+  classifyWalletError,
+  describeWalletError,
+  withWalletTimeout,
+} from "./walletError";
+export type { ClassifiedWalletError, WalletErrorKind } from "./walletError";
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Plain-message form of {@link classifyWalletError}, for read paths and
+ * components without a retry UI. A rejection is only reported as one when
+ * the EIP-1193 code 4001 is present — a hung request that never showed a
+ * popup must not be relabelled as a rejection.
+ */
 export function describeError(error: unknown): string {
-  if (error instanceof Error) {
-    const msg = error.message.split("\n")[0] ?? error.message;
-    if (/user rejected|user denied/i.test(msg)) return "Rejected in wallet.";
-    if (/over rate limit|429|too many requests/i.test(msg)) {
-      return "The public RPC is rate-limiting requests. Wait a moment and retry — do not resend a submitted transaction.";
-    }
-    return msg.length > 300 ? `${msg.slice(0, 300)}…` : msg;
-  }
-  return String(error);
+  return classifyWalletError(error).message;
 }
 
 /** Retry a read through transient RPC trouble. Reverts are answers, not retried here. */
@@ -285,18 +299,35 @@ export async function sendTx(
     throw new Error(`You have a pending transaction (nonce ${latestNonce}). Wait for it to confirm before sending ${label}.`);
   }
   await simulateTx(client, account, tx);
-  const hash = await wallet.sendTransaction({
-    account,
-    chain: wallet.chain,
-    to: tx.to,
-    data: tx.data,
-    ...(tx.value !== undefined ? { value: tx.value } : {}),
-  });
-  const receipt = await client.waitForTransactionReceipt({
-    hash,
-    timeout: 120_000,
-    pollingInterval: 4_000,
-  });
+  // The wallet signature request is the hang-prone step (a popup that never
+  // appears used to hang forever). Fail visibly after the timeout instead;
+  // the retry hint tells the user to check MetaMask's queue first, because
+  // timing out cannot cancel a request already queued in the wallet.
+  const hash = await withWalletTimeout(
+    wallet.sendTransaction({
+      account,
+      chain: wallet.chain,
+      to: tx.to,
+      data: tx.data,
+      ...(tx.value !== undefined ? { value: tx.value } : {}),
+    }),
+    WALLET_REQUEST_TIMEOUT_MS,
+  );
+  let receipt;
+  try {
+    receipt = await client.waitForTransactionReceipt({
+      hash,
+      timeout: 120_000,
+      pollingInterval: 4_000,
+    });
+  } catch {
+    // Keep the hash: the transaction may still confirm, and retrying
+    // blindly could double-send. The nonce guard above also protects the
+    // next send while this one is pending.
+    throw new Error(
+      `Submitted (tx ${hash}) but no confirmation within 120s. Check the explorer before retrying — the transaction may still confirm.`,
+    );
+  }
   if (receipt.status !== "success") throw new Error(`${label} reverted (tx ${hash})`);
   return hash;
 }
@@ -484,9 +515,15 @@ export async function executePoolSwap(
     },
   });
   onStatus?.("Waiting for wallet signature…");
-  const result = await prepared.execute(wallet, {
-    onStatus: (s) => onStatus?.(String((s as { type?: string }).type ?? "working")),
-  });
+  // The SDK's execute runs approvals + swap + receipt waits as one flow;
+  // give the whole flow a generous budget so a hung wallet request still
+  // fails visibly instead of hanging forever.
+  const result = await withWalletTimeout(
+    prepared.execute(wallet, {
+      onStatus: (s) => onStatus?.(String((s as { type?: string }).type ?? "working")),
+    }),
+    WALLET_FLOW_TIMEOUT_MS,
+  );
   if (result.amountReceived === null) {
     throw new Error("Swap succeeded but receipt-block output reconciliation was unavailable");
   }
