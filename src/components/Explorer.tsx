@@ -39,6 +39,11 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
   const [hasScanned, setHasScanned] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [enrichedCount, setEnrichedCount] = useState(0);
+  // Total for the enrichment run in progress. The denominator must come
+  // from the run itself, not launches.length: on Full rescan the list is
+  // cleared (length 0) while the stale enriching flag and count from the
+  // previous run were still set, which rendered "7/0".
+  const [enrichTotal, setEnrichTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | 1 | 2 | 3>("all");
@@ -95,11 +100,19 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
 
   // Progressive enrichment: token metadata + live curve state, newest first.
   useEffect(() => {
-    if (launches.length === 0) return;
+    if (launches.length === 0) {
+      // A rescan clears the list first: drop the stale enrichment counter
+      // and spinner, or the label reads e.g. "7/0" against an empty list.
+      setEnrichedCount(0);
+      setEnriching(false);
+      return;
+    }
     let cancelled = false;
     const queue = launches.filter((l) => !enriched.has(l.curve.toLowerCase()));
     if (queue.length === 0) return;
+    setEnrichTotal(queue.length);
     setEnriching(true);
+    setEnrichedCount(0);
     let done = 0;
     const run = async () => {
       const block = await client.getBlockNumber().catch(() => null);
@@ -142,6 +155,10 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
     void run();
     return () => {
       cancelled = true;
+      // The run is dead when the list changes (e.g. Full rescan clears it):
+      // drop the spinner immediately instead of leaving a stale
+      // "enriching" flag and count behind until the next run finishes.
+      setEnriching(false);
     };
   }, [launches]);
 
@@ -214,9 +231,9 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
           />
         </p>
       ) : null}
-      {enriching ? (
+      {enriching && enrichTotal > 0 ? (
         <p className="muted">
-          <Spinner label={`Loading token + curve details… ${enrichedCount}/${launches.length}`} />
+          <Spinner label={`Loading token + curve details… ${enrichedCount}/${enrichTotal}`} />
         </p>
       ) : null}
 
