@@ -11,8 +11,9 @@ import {
   type TokenMeta,
 } from "../lib/ammora";
 import { CORE, DEPLOYMENT_START_BLOCK, WETH, getPublicClient } from "../lib/giwa";
+import { usePagination } from "../lib/pagination";
 import { clearLaunchCache, loadLaunchCache, saveLaunchCache } from "../lib/store";
-import { AddressLink, Card, EmptyState, ErrorBox, ProgressBar, Spinner, StatusBadge } from "./ui";
+import { AddressLink, Card, EmptyState, ErrorBox, Pagination, ProgressBar, Spinner, StatusBadge } from "./ui";
 import { TokenIcon } from "./TokenIcon";
 
 export type EnrichedLaunch = LaunchRecord & {
@@ -189,6 +190,8 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
       });
   }, [launches, enriched, query, statusFilter]);
 
+  const pager = usePagination(rows.length, `${query}|${statusFilter}`);
+
   const activeCount = useMemo(
     () => [...enriched.values()].filter((l) => l.state?.status === 1).length,
     [enriched],
@@ -297,6 +300,7 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
           }
         />
       ) : (
+        <>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -312,7 +316,7 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
               </tr>
             </thead>
             <tbody>
-              {rows.map((l) => (
+              {pager.slice(rows).map((l) => (
                 <tr key={l.curve}>
                   <td>
                     <span className="token-cell">
@@ -365,6 +369,14 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={pager.page}
+          pageCount={pager.pageCount}
+          total={rows.length}
+          pageSize={pager.pageSize}
+          onPage={pager.setPage}
+        />
+        </>
       )}
       <p className="muted small">
         WETH: <AddressLink address={WETH as Address} /> · Discovery reads LaunchCreated logs from the
