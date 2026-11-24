@@ -42,6 +42,16 @@ export const GIWA_SEPOLIA = defineChain({
   blockExplorers: {
     default: { name: "GIWA Sepolia Explorer", url: EXPLORER_URL },
   },
+  // Multicall3 at its canonical deterministic address. Verified live
+  // 24 Nov 2026: both public RPCs return 3,808 bytes of code here.
+  // Declaring it lets client.multicall batch reads into single
+  // aggregate3 eth_calls — without it viem has no address for this
+  // custom chain and multicall throws.
+  contracts: {
+    multicall3: {
+      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+    },
+  },
 });
 
 const launch = DEPLOYMENT.contracts.launch;
@@ -160,6 +170,18 @@ export function getPublicClient(): PublicClient {
         getRpcUrls().map((url) => http(url, { retryCount: 3, retryDelay: 1000, timeout: 15_000 })),
         { rank: false },
       ),
+      // Batch same-tick contract reads (readContract/call) into Multicall3
+      // aggregate3 eth_calls. This is what makes the Config list fast: the
+      // SDK reads each Config with seven readContract calls, and without
+      // batching those went out as 623 separate eth_calls for the whole
+      // registry — serialized behind the browser's ~6 connections per
+      // origin, the first Launch Studio load took ~2 minutes. With
+      // batching, same-tick reads at the same block merge into a handful
+      // of aggregate3 calls (verified live 24 Nov 2026: one Config read
+      // issued exactly one HTTP request). Only plain reads merge — calls
+      // with value, nonce or gas (simulations, sends) are never batched,
+      // and a reverting read still throws exactly as before.
+      batch: { multicall: true },
     });
   }
   return publicClient;
