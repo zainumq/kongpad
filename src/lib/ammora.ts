@@ -129,6 +129,13 @@ export async function getConfig(
   configId: bigint,
   blockNumber: bigint,
 ): Promise<AmmoraV4ConfigSnapshot> {
+  // The SDK reads a Config with seven readContract calls. That used to mean
+  // seven eth_calls per Config — 623 for the whole registry, serialized
+  // behind the browser's ~6 connections per origin, which is why the first
+  // Launch Studio load took ~2 minutes. The shared client now batches
+  // same-tick reads into Multicall3 aggregate3 calls (see giwa.ts), so
+  // these seven reads go out as one eth_call — verified live 24 Nov 2026:
+  // a single getConfig issued exactly one HTTP request, an aggregate3.
   return getAmmoraV4ConfigAtBlock(client, CORE.configRegistry, configId, blockNumber);
 }
 
