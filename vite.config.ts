@@ -17,6 +17,10 @@ import react from "@vitejs/plugin-react";
  * at the GitHub Pages deploy step and all four runs failed there with
  * "No artifacts named 'github-pages'" (build itself passed each time).
  * This comment re-triggered a clean deploy run.
+ *
+ * Deploy note 2 (24 Nov 2026): same race again during the priority-fixes
+ * batch-4 push (7 files) — the live site stayed on the previous build.
+ * This comment re-triggered a clean deploy run for the full tree.
  */
 export default defineConfig({
   // Relative base so the same build works at a domain root (Vercel) and
