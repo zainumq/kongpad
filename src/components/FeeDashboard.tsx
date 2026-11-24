@@ -3,6 +3,7 @@ import { isAddress, zeroAddress, type Address, type Hash } from "viem";
 import {
   claimLaunchFees,
   claimLpFees,
+  classifyWalletError,
   describeError,
   fmt,
   getFeeVault,
@@ -10,12 +11,13 @@ import {
   getTokenMeta,
   getUserLpPositions,
   updateFeeDelegate,
+  type ClassifiedWalletError,
   type LpPosition,
 } from "../lib/ammora";
 import { CORE, WETH, getFinalizedBlock, getPublicClient } from "../lib/giwa";
 import { getWalletClient, type WalletState } from "../lib/wallet";
 import { loadMyLaunches } from "../lib/store";
-import { AddressLink, Card, EmptyState, ErrorBox, Spinner, TxLink, TxStatus } from "./ui";
+import { AddressLink, Card, EmptyState, ErrorBox, Spinner, TxLink, TxStatus, WalletErrorBox } from "./ui";
 
 type FeeRow = {
   token: Address;
@@ -49,7 +51,14 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
   const [busy, setBusy] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
   const [lastTx, setLastTx] = useState<Hash | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ClassifiedWalletError | null>(null);
+  // Last failed wallet action, so Retry re-runs it with current inputs.
+  const [lastAction, setLastAction] = useState<
+    | { kind: "claim-launch"; row: FeeRow }
+    | { kind: "claim-lp"; pos: LpPosition }
+    | { kind: "delegate"; pos: LpPosition; revoke: boolean }
+    | null
+  >(null);
 
   const loadLaunchFees = useCallback(async () => {
     if (!wallet.address) return;
@@ -140,6 +149,7 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
     if (!wallet.address || !feeVault) return;
     setBusy(true);
     setActionError(null);
+    setLastAction(null);
     setTxStatus("Claiming launch fees…");
     try {
       const wc = getWalletClient(wallet.address);
@@ -148,7 +158,8 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
       setTxStatus(`Claimed ${fmt(row.claimable, row.decimals)} ${row.symbol}.`);
       await loadLaunchFees();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(classifyWalletError(e));
+      setLastAction({ kind: "claim-launch", row });
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -159,6 +170,7 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
     if (!wallet.address) return;
     setBusy(true);
     setActionError(null);
+    setLastAction(null);
     setTxStatus("Claiming LP fees…");
     try {
       const wc = getWalletClient(wallet.address);
@@ -167,7 +179,8 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
       setTxStatus("LP fees claimed.");
       await loadPositions();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(classifyWalletError(e));
+      setLastAction({ kind: "claim-lp", pos });
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -179,16 +192,17 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
     const input = delegateInputs[pos.tokenId.toString()];
     const delegate = revoke ? zeroAddress : (input?.delegate as Address | undefined);
     if (!revoke && (!delegate || !isAddress(delegate))) {
-      setActionError("Enter a valid delegate address");
+      setActionError({ kind: "other", message: "Enter a valid delegate address" });
       return;
     }
     if (!revoke && delegate!.toLowerCase() === wallet.address.toLowerCase()) {
-      setActionError("Fee delegate must differ from the NFT owner");
+      setActionError({ kind: "other", message: "Fee delegate must differ from the NFT owner" });
       return;
     }
     const permission = revoke ? 0 : input?.mode === "claim-fee" ? 8 : 16;
     setBusy(true);
     setActionError(null);
+    setLastAction(null);
     setTxStatus(revoke ? "Revoking fee delegation…" : "Granting fee delegation…");
     try {
       const wc = getWalletClient(wallet.address);
@@ -197,11 +211,18 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
       setTxStatus(revoke ? "Delegation revoked and confirmed on-chain." : "Delegation granted and confirmed on-chain.");
       await loadPositions();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(classifyWalletError(e));
+      setLastAction({ kind: "delegate", pos, revoke });
       setTxStatus(null);
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryAction = () => {
+    if (lastAction?.kind === "claim-launch") void handleClaimLaunchFee(lastAction.row);
+    else if (lastAction?.kind === "claim-lp") void handleClaimLpFees(lastAction.pos);
+    else if (lastAction?.kind === "delegate") void handleDelegate(lastAction.pos, lastAction.revoke);
   };
 
   const totalClaimableWeth = rows.find((r) => r.token.toLowerCase() === WETH.toLowerCase())?.claimable ?? 0n;
@@ -469,7 +490,9 @@ export function FeeDashboard({ wallet }: { wallet: WalletState }) {
         </p>
       </Card>
 
-      {actionError ? <ErrorBox message={actionError} /> : null}
+      {actionError ? (
+        <WalletErrorBox error={actionError} onRetry={lastAction ? retryAction : undefined} />
+      ) : null}
       <TxStatus status={txStatus} hash={lastTx} />
       {lastTx ? (
         <p className="muted small">
