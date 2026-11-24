@@ -154,18 +154,48 @@ export type LaunchRecord = {
 const LOG_CHUNK = 10_000n;
 const LOG_WORKERS = 4;
 
-/** Discover all launches from factory LaunchCreated logs, chunked for public RPCs. */
+/**
+ * Discover all launches from factory LaunchCreated logs, chunked for public RPCs.
+ *
+ * `onCheckpoint` fires whenever the contiguous scanned prefix advances (the
+ * workers finish ranges out of order, so only the in-order prefix is safe to
+ * persist). The caller should save the checkpoint to the launch cache so a
+ * reload resumes from it instead of restarting the scan; the checkpoint has
+ * the same shape as the completed-scan cache, with `scannedTo` at the end of
+ * the contiguous prefix.
+ */
 export async function discoverLaunches(
   client: PublicClient,
   fromBlock: bigint,
   onProgress?: (scannedTo: bigint, head: bigint, found: number) => void,
+  onCheckpoint?: (checkpoint: { launches: LaunchRecord[]; scannedTo: bigint }) => void,
 ): Promise<{ launches: LaunchRecord[]; scannedTo: bigint }> {
   const head = await client.getBlockNumber();
   const launches: LaunchRecord[] = [];
-  const ranges: { from: bigint; to: bigint }[] = [];
-  for (let from = fromBlock; from <= head; from += LOG_CHUNK) {
-    ranges.push({ from, to: from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n });
+  const ranges: { index: number; from: bigint; to: bigint }[] = [];
+  for (let from = fromBlock, index = 0; from <= head; from += LOG_CHUNK, index++) {
+    ranges.push({ index, from, to: from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n });
   }
+  // Completed-but-not-yet-prefix ranges wait here until the gap ahead of
+  // them fills. The checkpoint only ever advances over the contiguous prefix.
+  const pending = new Map<number, { to: bigint; launches: LaunchRecord[] }>();
+  let nextIndex = 0;
+  let prefixTo = fromBlock - 1n;
+  const prefixLaunches: LaunchRecord[] = [];
+  const advancePrefix = () => {
+    let advanced = false;
+    while (pending.has(nextIndex)) {
+      const done = pending.get(nextIndex)!;
+      pending.delete(nextIndex);
+      nextIndex += 1;
+      prefixTo = done.to;
+      prefixLaunches.push(...done.launches);
+      advanced = true;
+    }
+    if (advanced) {
+      onCheckpoint?.({ launches: [...prefixLaunches], scannedTo: prefixTo });
+    }
+  };
   let scanned = 0;
   const workers = Array.from({ length: LOG_WORKERS }, async () => {
     while (ranges.length > 0) {
@@ -180,6 +210,7 @@ export async function discoverLaunches(
           toBlock: range.to,
         }),
       );
+      const found: LaunchRecord[] = [];
       for (const e of events) {
         const a = e.args as {
           token: Address;
@@ -189,7 +220,7 @@ export async function discoverLaunches(
           configHash: Hex;
           metadataURI: string;
         };
-        launches.push({
+        found.push({
           token: a.token,
           curve: a.curve,
           creator: a.creator,
@@ -200,6 +231,9 @@ export async function discoverLaunches(
           txHash: e.transactionHash,
         });
       }
+      launches.push(...found);
+      pending.set(range.index, { to: range.to, launches: found });
+      advancePrefix();
       scanned += 1;
       onProgress?.(range.to, head, launches.length);
     }
@@ -277,6 +311,37 @@ export async function quoteCurve(
   if (state.status !== 1) throw new Error(`Curve status ${state.status} is not active`);
   const quote = await sdk.quoteExactInputAtBlock(amountIn, baseForQuote, blockNumber);
   return { state, quote, fill: classifyAmmoraV4ExactInputFill(quote, baseForQuote) };
+}
+
+/**
+ * Price impact of a launch-curve trade in basis points, mirroring the SDK's
+ * own `cpAmmPriceImpactBps` formula: |execution price - spot price| / spot
+ * price, with spot = sqrtPrice^2 (Q64.96, raw quote-per-base units) and the
+ * execution price from the quoted amounts. `baseForQuote` is true when the
+ * input is the base (launched) token (a sell). `amountIn` must be the
+ * *consumed* amount from the quote (amountLeft excluded), not the requested
+ * amount. Returns null when the impact cannot be computed (zero or negative
+ * inputs) so the UI hides it instead of inventing a number. The fee is not
+ * adjusted for — same as the SDK helper — so the figure is conservative (it
+ * includes the fee drag); the fee is shown separately next to the quote.
+ */
+export function curvePriceImpactBps(
+  amountIn: bigint,
+  amountOut: bigint,
+  sqrtPrice: bigint,
+  baseForQuote: boolean,
+): bigint | null {
+  if (sqrtPrice <= 0n || amountIn <= 0n || amountOut <= 0n) return null;
+  const Q128 = 1n << 128n;
+  const spotPriceX128 = sqrtPrice * sqrtPrice;
+  const executionNumerator = baseForQuote ? amountOut * Q128 : amountIn * Q128;
+  const executionDenominator = baseForQuote ? amountIn : amountOut;
+  const spotNumerator = spotPriceX128 * executionDenominator;
+  const difference =
+    executionNumerator > spotNumerator
+      ? executionNumerator - spotNumerator
+      : spotNumerator - executionNumerator;
+  return (difference * 10000n) / spotNumerator;
 }
 
 // ---------------------------------------------------------------------------
