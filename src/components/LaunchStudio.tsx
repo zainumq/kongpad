@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, isAddress, parseUnits, type Address, type Hash } from "viem";
 import {
   buildLaunchTx,
+  classifyWalletError,
   describeError,
   executeCreateLaunch,
   fmt,
   getConfig,
   type AmmoraV4ConfigSnapshot,
+  type ClassifiedWalletError,
 } from "../lib/ammora";
 import { getFinalizedBlock, getPublicClient } from "../lib/giwa";
 import { getWalletClient, type WalletState } from "../lib/wallet";
@@ -22,7 +24,7 @@ import {
 import { getAmmoraV4NextConfigId } from "@ammora-protocol/sdk";
 import { CORE } from "../lib/giwa";
 import { saveMyConfig, saveMyLaunch } from "../lib/store";
-import { Card, EmptyState, ErrorBox, Spinner, TxLink, TxStatus } from "./ui";
+import { Card, EmptyState, ErrorBox, Spinner, TxLink, TxStatus, WalletErrorBox } from "./ui";
 import type { EnrichedLaunch } from "./Explorer";
 
 type StudioProps = {
@@ -43,10 +45,14 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
   // Step 1 — Config
   const [templateId, setTemplateId] = useState<string>("");
   const [saleTokens, setSaleTokens] = useState("1000000");
-  const [thresholdWeth, setThresholdWeth] = useState("0.05");
+  const [thresholdWeth, setThresholdWeth] = useState("");
+  const [thresholdTouched, setThresholdTouched] = useState(false);
   const [recipients, setRecipients] = useState<TeamRecipients | null>(null);
   const [plan, setPlan] = useState<TeamConfigPlan | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
+  // Wallet failures from the Config creation send (kept separate from
+  // planError, which also carries planning/validation failures).
+  const [configWalletError, setConfigWalletError] = useState<ClassifiedWalletError | null>(null);
   const [creatingConfig, setCreatingConfig] = useState(false);
   const [configTx, setConfigTx] = useState<Hash | null>(null);
   const [createdConfig, setCreatedConfig] = useState<{ id: bigint; hash: string } | null>(null);
@@ -59,7 +65,7 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
   const [metadataUri, setMetadataUri] = useState("");
   const [launching, setLaunching] = useState(false);
   const [launchTx, setLaunchTx] = useState<Hash | null>(null);
-  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<ClassifiedWalletError | null>(null);
   const [launchConfigSnapshot, setLaunchConfigSnapshot] = useState<AmmoraV4ConfigSnapshot | null>(null);
   const [launchConfigError, setLaunchConfigError] = useState<string | null>(null);
 
@@ -121,6 +127,14 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
     [configs, templateId],
   );
 
+  // The graduation threshold starts from the selected template's own
+  // on-chain value (read from the template, never hardcoded) until the
+  // creator edits it — an explicit edit always wins over template changes.
+  const effectiveThresholdWeth =
+    thresholdTouched || !template
+      ? thresholdWeth
+      : formatUnits(template.config.migrationQuoteThreshold, 18);
+
   useEffect(() => {
     if (wallet.address && !recipients) {
       setRecipients({
@@ -139,7 +153,7 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
     if (!template || !recipients || !wallet.address) return;
     try {
       const saleSupply = parseUnits(saleTokens || "0", template.config.tokenDecimals);
-      const threshold = parseUnits(thresholdWeth || "0", 18);
+      const threshold = parseUnits(effectiveThresholdWeth || "0", 18);
       if (saleSupply <= 0n) throw new Error("Sale supply must be positive");
       if (threshold <= 0n) throw new Error("Graduation threshold must be positive");
       const p = planTeamConfig(
@@ -152,11 +166,12 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
     } catch (e) {
       setPlanError(describeError(e));
     }
-  }, [template, recipients, saleTokens, thresholdWeth, wallet.address]);
+  }, [template, recipients, saleTokens, effectiveThresholdWeth, wallet.address]);
 
   const handleCreateConfig = async () => {
     if (!wallet.address || !plan) return;
     setCreatingConfig(true);
+    setConfigWalletError(null);
     setTxStatus("Simulating, then waiting for your wallet signature…");
     try {
       const wc = getWalletClient(wallet.address);
@@ -177,7 +192,7 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
       void loadConfigs();
     } catch (e) {
       setTxStatus(null);
-      setPlanError(describeError(e));
+      setConfigWalletError(classifyWalletError(e));
     } finally {
       setCreatingConfig(false);
     }
@@ -215,7 +230,7 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
   const handleCreateLaunch = async () => {
     if (!wallet.address || !launchConfigSnapshot) return;
     if (!tokenName.trim() || !tokenSymbol.trim()) {
-      setLaunchError("Token name and symbol are required");
+      setLaunchError({ kind: "other", message: "Token name and symbol are required" });
       return;
     }
     setLaunching(true);
@@ -264,7 +279,7 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
         meta: { name: tokenName.trim(), symbol: tokenSymbol.trim().toUpperCase(), decimals: launchConfigSnapshot.config.tokenDecimals },
       });
     } catch (e) {
-      setLaunchError(describeError(e));
+      setLaunchError(classifyWalletError(e));
       setTxStatus(null);
     } finally {
       setLaunching(false);
@@ -317,10 +332,32 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
           </label>
           <label className="field">
             <span>Graduation threshold (WETH)</span>
-            <input className="input" value={thresholdWeth} onChange={(e) => setThresholdWeth(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" />
+            <input
+              className="input"
+              value={effectiveThresholdWeth}
+              onChange={(e) => {
+                setThresholdTouched(true);
+                setThresholdWeth(e.target.value.replace(/[^0-9.]/g, ""));
+              }}
+              inputMode="decimal"
+            />
             <span className="hint">Quote that must be raised before the token can graduate.</span>
           </label>
         </div>
+
+        {template ? (
+          <div className="preview">
+            <p>
+              <strong>
+                Template #{template.configId.toString()} graduates at{" "}
+                {formatUnits(template.config.migrationQuoteThreshold, 18)} WETH.
+              </strong>{" "}
+              Once the curve raises that much WETH, the token graduates and its liquidity migrates to a pool — so a
+              small threshold means a very short sale. The threshold above starts from this template value; raise it
+              before creating your Config if you want a longer sale.
+            </p>
+          </div>
+        ) : null}
 
         <h3 className="subhead">Recipients — all four are set explicitly (nothing is inherited from the template)</h3>
         <div className="form-grid">
@@ -374,6 +411,9 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
           </div>
         ) : null}
         {planError ? <ErrorBox message={planError} /> : null}
+        {configWalletError ? (
+          <WalletErrorBox error={configWalletError} onRetry={() => void handleCreateConfig()} />
+        ) : null}
 
         <div className="row">
           <button
@@ -436,9 +476,14 @@ export function LaunchStudio({ wallet, onLaunched }: StudioProps) {
               <dt>Graduation threshold</dt>
               <dd>{formatUnits(launchConfigSnapshot.config.migrationQuoteThreshold, 18)} WETH</dd>
             </dl>
+            <p className="muted small">
+              Once the curve raises this much WETH, the token graduates and its liquidity migrates to a pool.
+            </p>
           </div>
         ) : null}
-        {launchError ? <ErrorBox message={launchError} /> : null}
+        {launchError ? (
+          <WalletErrorBox error={launchError} onRetry={() => void handleCreateLaunch()} />
+        ) : null}
 
         <div className="row">
           <button
