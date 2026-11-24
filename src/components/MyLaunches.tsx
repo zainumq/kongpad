@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { loadMyConfigs, loadMyLaunches } from "../lib/store";
 import { AddressLink, Card, EmptyState, TxLink } from "./ui";
+import { TokenIcon } from "./TokenIcon";
 
 export function MyLaunches({ onTrade }: { onTrade: (token: string, curve: string, configId: string, name: string, symbol: string) => void }) {
   const [launches] = useState(loadMyLaunches);
@@ -31,8 +32,13 @@ export function MyLaunches({ onTrade }: { onTrade: (token: string, curve: string
                 {launches.map((l) => (
                   <tr key={l.curve}>
                     <td>
-                      <strong>{l.name}</strong> <span className="muted">${l.symbol}</span>
-                      <div className="muted small mono">{l.token.slice(0, 10)}…</div>
+                      <span className="token-cell">
+                        <TokenIcon address={l.token} size={26} />
+                        <span>
+                          <strong>{l.name}</strong> <span className="muted">${l.symbol}</span>
+                          <div className="muted small mono">{l.token.slice(0, 10)}…</div>
+                        </span>
+                      </span>
                     </td>
                     <td>
                       <AddressLink address={l.curve} />
