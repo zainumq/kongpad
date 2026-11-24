@@ -14,8 +14,14 @@ import { getRpcUrls } from "./giwa";
 export const PROBE_INTERVAL_MS = 30_000;
 /** A single probe call fails fast so one dead endpoint never stalls the check. */
 const PROBE_TIMEOUT_MS = 8_000;
-/** Consecutive failed probes before the banner appears — one dropped connection is noise. */
-export const FAILURES_TO_ALERT = 2;
+/**
+ * Consecutive failed probes before the banner appears. Three, not two:
+ * during a heavy first load (89 Config reads) the browser's per-origin
+ * connections saturate and two probes in a row can time out even though
+ * the RPC is alive — that false alarm fired on the live site on 24 Nov
+ * 2026. A real outage still alerts after ~60s (probes every 30s).
+ */
+export const FAILURES_TO_ALERT = 3;
 
 async function probeUrl(url: string): Promise<boolean> {
   const controller = new AbortController();
