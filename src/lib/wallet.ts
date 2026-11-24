@@ -6,6 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 import { createWalletClient, custom, type Address, type WalletClient } from "viem";
 import { CHAIN_ID, GIWA_SEPOLIA, EXPLORER_URL, getRpcUrls } from "./giwa";
 import { describeWalletError, withWalletTimeout } from "./walletError";
+import {
+  connectWalletConnect as connectWC,
+  disconnectWalletConnect,
+  getWcProvider,
+} from "./walletconnect";
 
 export type WalletState = {
   address: Address | null;
@@ -13,6 +18,7 @@ export type WalletState = {
   isConnected: boolean;
   isCorrectChain: boolean;
   hasProvider: boolean;
+  connectionType: "injected" | "walletconnect" | null;
 };
 
 const initialState: WalletState = {
@@ -21,9 +27,18 @@ const initialState: WalletState = {
   isConnected: false,
   isCorrectChain: false,
   hasProvider: typeof window !== "undefined" && Boolean(window.ethereum),
+  connectionType: null,
 };
 
 export function getWalletClient(address: Address): WalletClient {
+  const wc = getWcProvider();
+  if (wc) {
+    return createWalletClient({
+      account: address,
+      chain: GIWA_SEPOLIA,
+      transport: custom(wc as never),
+    });
+  }
   if (!window.ethereum) throw new Error("No injected wallet found");
   return createWalletClient({
     account: address,
@@ -38,6 +53,7 @@ export function useWallet() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (getWcProvider()) return; // WalletConnect session owns the state
     if (!window.ethereum) return;
     try {
       const accounts = (await window.ethereum.request({ method: "eth_accounts" })) as string[];
@@ -50,6 +66,7 @@ export function useWallet() {
         isConnected: address !== null,
         isCorrectChain: chainId === CHAIN_ID,
         hasProvider: true,
+        connectionType: address !== null ? "injected" : null,
       });
     } catch {
       // Provider unreadable; keep previous state.
@@ -60,6 +77,7 @@ export function useWallet() {
     void refresh();
     if (!window.ethereum?.on) return;
     const onAccounts = (...args: unknown[]) => {
+      if (getWcProvider()) return; // WalletConnect session owns the account
       const accounts = args[0] as string[];
       setState((s) => ({
         ...s,
@@ -68,6 +86,7 @@ export function useWallet() {
       }));
     };
     const onChain = (...args: unknown[]) => {
+      if (getWcProvider()) return;
       const chainId = Number.parseInt(args[0] as string, 16);
       setState((s) => ({ ...s, chainId, isCorrectChain: chainId === CHAIN_ID }));
     };
@@ -133,9 +152,36 @@ export function useWallet() {
     }
   }, [refresh, switchChain]);
 
-  const disconnect = useCallback(() => {
-    setState((s) => ({ ...s, address: null, isConnected: false }));
+  const handleWcDisconnect = useCallback(() => {
+    void disconnectWalletConnect();
+    setState((s) => ({ ...s, address: null, isConnected: false, connectionType: null }));
   }, []);
 
-  return { ...state, connecting, error, connect, disconnect, switchChain, refresh };
+  const connectWalletConnect = useCallback(async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const address = await connectWC();
+      setState((s) => ({
+        ...s,
+        address,
+        chainId: CHAIN_ID,
+        isConnected: true,
+        isCorrectChain: true,
+        connectionType: "walletconnect",
+      }));
+      getWcProvider()?.on("disconnect", handleWcDisconnect);
+    } catch (e) {
+      setError(describeWalletError(e));
+    } finally {
+      setConnecting(false);
+    }
+  }, [handleWcDisconnect]);
+
+  const disconnect = useCallback(() => {
+    if (getWcProvider()) void disconnectWalletConnect();
+    setState((s) => ({ ...s, address: null, isConnected: false, connectionType: null }));
+  }, []);
+
+  return { ...state, connecting, error, connect, connectWalletConnect, disconnect, switchChain, refresh };
 }
