@@ -1,0 +1,658 @@
+/*
+ * KongPad theme — aligned with Ammora's own design system (ammora.org):
+ * a light warm-white page, dark-navy ink, and the violet → blue → cyan →
+ * mint brand gradient. Kong's gold survives as the mascot accent.
+ */
+:root {
+  --bg: #f7f6f4;
+  --surface: #ffffff;
+  --surface-2: #eef0f5;
+  --border: rgba(8, 16, 31, 0.12);
+  --text: #08101f;
+  --muted: #515b70;
+  --violet: #7938fb;
+  --blue: #666dfb;
+  --cyan: #49c9f4;
+  --mint: #66f3ac;
+  --gradient-brand: linear-gradient(90deg, #7938fb 0%, #666dfb 34%, #49c9f4 68%, #66f3ac 100%);
+  --gradient-action: linear-gradient(105deg, #7938fb 0%, #666dfb 46%, #49c9f4 100%);
+  --gold: #b8860b;
+  --gold-dim: #8a6508;
+  --green: #1d8a50;
+  --amber: #b97a1a;
+  --red: #d92d20;
+  --radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color-scheme: light;
+}
+
+a {
+  color: inherit;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.82em;
+}
+
+.app {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+.testnet-banner {
+  background: #fdf3d7;
+  border: 1px solid #f0d48a;
+  color: #7a5b00;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 12px 0;
+  font-size: 0.88em;
+  text-align: center;
+}
+
+.header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 0 16px;
+}
+
+.header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--gradient-brand);
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.brand-mark img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(121, 56, 251, 0.25);
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: "Nunito Sans", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.brand-name {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-tag {
+  font-size: 0.62em;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.brand p {
+  margin: 0;
+}
+
+.wallet-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chain-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.chain-dot.ok {
+  background: var(--green);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 16px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.95em;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--violet);
+  border-bottom-color: var(--violet);
+}
+
+.tabs-small {
+  border-bottom: none;
+  margin: 0 0 12px;
+}
+
+.tabs-small .tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.tabs-small .tab.active {
+  background: var(--surface-2);
+  border-color: var(--violet);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(8, 16, 31, 0.05), 0 8px 24px rgba(8, 16, 31, 0.05);
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.card-head h2 {
+  margin: 0 0 4px;
+  font-family: "Nunito Sans", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 1.15rem;
+}
+
+.card-head p {
+  margin: 0;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--gradient-action);
+  border-color: transparent;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(102, 109, 251, 0.28);
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+  border-color: transparent;
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 0.85em;
+}
+
+.input,
+select.input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 0.92em;
+  width: 100%;
+}
+
+.input:focus {
+  outline: 2px solid var(--cyan);
+  border-color: var(--violet);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span:first-child {
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.hint {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filters .input:first-child {
+  flex: 1;
+  min-width: 220px;
+}
+
+.filters select.input {
+  max-width: 200px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-green {
+  background: #dcf5e7;
+  color: #157347;
+}
+
+.badge-amber {
+  background: #fdf0d5;
+  color: #9a6a0a;
+}
+
+.badge-blue {
+  background: #e3e6fe;
+  color: #4548d8;
+}
+
+.badge-gray {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.progress {
+  position: relative;
+  background: var(--surface-2);
+  border-radius: 999px;
+  height: 18px;
+  overflow: hidden;
+  min-width: 110px;
+}
+
+.progress-fill {
+  background: var(--gradient-brand);
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 12px 0;
+}
+
+.kv dt {
+  color: var(--muted);
+  font-size: 0.88em;
+}
+
+.kv dd {
+  margin: 0;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.kv-3 {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.kv-3 dt {
+  grid-row: auto;
+}
+
+.preview,
+.notice,
+.wrap-box,
+.trade-box,
+.delegate-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 12px 0;
+  background: var(--surface-2);
+}
+
+.notice {
+  border-color: var(--amber);
+  background: #fdf3d7;
+}
+
+.subhead {
+  font-size: 0.95rem;
+  margin: 16px 0 8px;
+}
+
+.error-box {
+  background: #fdecea;
+  border: 1px solid #f5b5b0;
+  color: #b42318;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  word-break: break-word;
+}
+
+.error-text {
+  color: #d92d20;
+  font-size: 0.85em;
+  margin: 4px 0;
+}
+
+.empty {
+  text-align: center;
+  padding: 28px 12px;
+  color: var(--muted);
+}
+
+.empty-title {
+  color: var(--text);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.spinner {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.spinner-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--violet);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tx-status {
+  background: var(--surface);
+  border: 1px solid var(--violet);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+
+.tx-status p {
+  margin: 4px 0;
+}
+
+.token-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.token-head h3 {
+  margin: 0;
+}
+
+.token-head p {
+  margin: 4px 0 0;
+}
+
+.position {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.position-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.link {
+  color: var(--violet);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.footer {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.footer code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 14px;
+  }
+
+  .brand h1 {
+    font-size: 1.2rem;
+  }
+
+  .kv {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .kv dd {
+    margin-bottom: 8px;
+  }
+}
+
+.rpc-settings {
+  margin: 12px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+
+.rpc-settings summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.rpc-body {
+  margin-top: 10px;
+}
+
+.rpc-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.rpc-row .input {
+  flex: 1;
+  min-width: 240px;
+  width: auto;
+}
+
+/* Season badge — mirrors the "Season 2" gradient pill on ammora.org's hero. */
+.season-pill {
+  display: inline-block;
+  background: var(--gradient-action);
+  color: #ffffff;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
