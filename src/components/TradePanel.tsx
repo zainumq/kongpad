@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, formatEther, formatUnits, isAddress, parseUnits, type Address, type Hash } from "viem";
 import {
+  classifyWalletError,
   describeError,
   executeCurveSwap,
   executeMigration,
@@ -13,11 +14,12 @@ import {
   quoteCurve,
   sendTx,
   type AmmoraV4LaunchCurveState,
+  type ClassifiedWalletError,
   type TokenMeta,
 } from "../lib/ammora";
 import { CORE, WETH, explorerAddress, getFinalizedBlock, getPublicClient } from "../lib/giwa";
 import { getWalletClient, type WalletState } from "../lib/wallet";
-import { Card, ErrorBox, ProgressBar, Spinner, StatusBadge, TxLink, TxStatus } from "./ui";
+import { Card, ErrorBox, ProgressBar, Spinner, StatusBadge, TxLink, TxStatus, WalletErrorBox } from "./ui";
 import type { EnrichedLaunch } from "./Explorer";
 
 const WETH_ABI = [
@@ -60,7 +62,10 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
   const [busy, setBusy] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
   const [lastTx, setLastTx] = useState<Hash | null>(null);
-  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [tradeError, setTradeError] = useState<ClassifiedWalletError | null>(null);
+  // Which wallet action failed last — Retry re-runs the current handler
+  // (fresh state), never a stale closure.
+  const [tradeAction, setTradeAction] = useState<"swap" | "wrap" | "final-fill" | "migrate" | "pool-swap" | null>(null);
   const [wrapAmount, setWrapAmount] = useState("");
 
   const quoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,6 +174,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!wallet.address || !curve || !state || !tokenIn || !amount) return;
     setBusy(true);
     setTradeError(null);
+    setTradeAction(null);
     setTxStatus("Planning the swap…");
     try {
       const decimals = side === "buy" ? 18 : (meta?.decimals ?? 9);
@@ -183,7 +189,8 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
       setAmount("");
       await refresh();
     } catch (e) {
-      setTradeError(describeError(e));
+      setTradeError(classifyWalletError(e));
+      setTradeAction("swap");
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -194,6 +201,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!wallet.address || !wrapAmount) return;
     setBusy(true);
     setTradeError(null);
+    setTradeAction(null);
     setTxStatus("Wrapping ETH → WETH…");
     try {
       const value = parseUnits(wrapAmount, 18);
@@ -211,7 +219,8 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
       setWrapAmount("");
       await refresh();
     } catch (e) {
-      setTradeError(describeError(e));
+      setTradeError(classifyWalletError(e));
+      setTradeAction("wrap");
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -228,6 +237,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!wallet.address || !curve || !state) return;
     setBusy(true);
     setTradeError(null);
+    setTradeAction(null);
     setTxStatus("Planning the final fill…");
     try {
       // Max input = remaining threshold + 10% headroom, capped by WETH balance.
@@ -244,7 +254,8 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
       );
       await refresh();
     } catch (e) {
-      setTradeError(describeError(e));
+      setTradeError(classifyWalletError(e));
+      setTradeAction("final-fill");
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -255,6 +266,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!wallet.address || !curve) return;
     setBusy(true);
     setTradeError(null);
+    setTradeAction(null);
     setTxStatus("Simulating migration, then waiting for your signature…");
     try {
       const wc = getWalletClient(wallet.address);
@@ -263,7 +275,8 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
       setTxStatus(`Graduated! ARL pool: ${res.canonicalPool}`);
       await refresh();
     } catch (e) {
-      setTradeError(describeError(e));
+      setTradeError(classifyWalletError(e));
+      setTradeAction("migrate");
       setTxStatus(null);
     } finally {
       setBusy(false);
@@ -274,6 +287,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!wallet.address || !state || state.status !== 3 || !tokenIn || !amount) return;
     setBusy(true);
     setTradeError(null);
+    setTradeAction(null);
     setTxStatus("Planning the pool swap…");
     try {
       const decimals = side === "buy" ? 18 : (meta?.decimals ?? 9);
@@ -285,11 +299,20 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
       setAmount("");
       await refresh();
     } catch (e) {
-      setTradeError(describeError(e));
+      setTradeError(classifyWalletError(e));
+      setTradeAction("pool-swap");
       setTxStatus(null);
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryTrade = () => {
+    if (tradeAction === "swap") void handleSwap();
+    else if (tradeAction === "wrap") void handleWrap();
+    else if (tradeAction === "final-fill") void handleFinalFill();
+    else if (tradeAction === "migrate") void handleMigrate();
+    else if (tradeAction === "pool-swap") void handlePoolSwap();
   };
 
   const isGraduated = state?.status === 3;
@@ -465,7 +488,9 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
                     <dd>{quote.kind}</dd>
                   </dl>
                 ) : null}
-                {tradeError ? <ErrorBox message={tradeError} /> : null}
+                {tradeError ? (
+                  <WalletErrorBox error={tradeError} onRetry={tradeAction ? retryTrade : undefined} />
+                ) : null}
                 <div className="row">
                   <button
                     type="button"
@@ -483,6 +508,8 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
             {side === "buy" && wallet.address ? (
               <div className="wrap-box">
                 <strong>Need WETH?</strong> Buys pay in WETH (ERC-20), not native ETH. Wrap only what you need.
+                Native-ETH buys are not enabled for V4 curves — the Ammora native router's execution registry does not
+                accept V4 launch curves (verified on-chain 24 Nov 2026), so wrapping is currently required.
                 <div className="row">
                   <input
                     className="input mono"
