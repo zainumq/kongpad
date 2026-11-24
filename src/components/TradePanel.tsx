@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, formatEther, formatUnits, isAddress, parseUnits, type Address, type Hash } from "viem";
 import {
   classifyWalletError,
+  curvePriceImpactBps,
   describeError,
   executeCurveSwap,
   executeMigration,
@@ -52,6 +53,10 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     fee: bigint;
     left: bigint;
     kind: string;
+    /** Consumed input from the quote (excludes amountLeft) — for price impact. */
+    amountIn: bigint;
+    /** sqrtPrice at the quote block — the spot price for price impact. */
+    sqrtPrice: bigint;
   } | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
@@ -141,7 +146,7 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
           const block = await getFinalizedBlock(client);
           const q = await quoteCurve(client, curve, amountIn, side === "sell", block);
           const minOut = (q.quote.amountOut * BigInt(10_000 - slippageBps)) / 10_000n;
-          setQuote({ out: q.quote.amountOut, minOut, fee: q.quote.fee, left: q.quote.amountLeft, kind: q.fill.kind });
+          setQuote({ out: q.quote.amountOut, minOut, fee: q.quote.fee, left: q.quote.amountLeft, kind: q.fill.kind, amountIn: q.quote.amountIn, sqrtPrice: q.state.sqrtPrice });
         } catch (e) {
           setQuoteError(describeError(e));
         } finally {
@@ -158,6 +163,15 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
     if (!state) return null;
     return side === "buy" ? state.quoteToken : state.baseToken;
   }, [state, side]);
+
+  // Price impact of the quoted trade vs the spot price (null = cannot be
+  // computed, so the row is hidden rather than invented). Warning only — it
+  // never blocks the trade. Only curve trades have a quote; graduated pool
+  // swaps have no quote step, so no impact is shown for them.
+  const priceImpactBps = useMemo(() => {
+    if (!quote) return null;
+    return curvePriceImpactBps(quote.amountIn, quote.out, quote.sqrtPrice, side === "sell");
+  }, [quote, side]);
 
   const insufficient = useMemo(() => {
     if (!amount || !state) return false;
@@ -490,7 +504,22 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
                     </dd>
                     <dt>Fill</dt>
                     <dd>{quote.kind}</dd>
+                    {priceImpactBps !== null ? (
+                      <>
+                        <dt>Price impact</dt>
+                        <dd className={priceImpactBps > 500n ? "impact-danger" : priceImpactBps > 100n ? "impact-warn" : undefined}>
+                          {(Number(priceImpactBps) / 100).toFixed(2)}%
+                        </dd>
+                      </>
+                    ) : null}
                   </dl>
+                ) : null}
+                {priceImpactBps !== null && priceImpactBps > 100n ? (
+                  <p className={priceImpactBps > 500n ? "impact-danger" : "impact-warn"}>
+                    {priceImpactBps > 500n
+                      ? "Very high price impact — this trade moves the price a lot. Consider a smaller amount."
+                      : "High price impact — you get noticeably less than the spot price suggests."}
+                  </p>
                 ) : null}
                 {tradeError ? (
                   <WalletErrorBox error={tradeError} onRetry={tradeAction ? retryTrade : undefined} />
