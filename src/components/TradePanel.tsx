@@ -20,6 +20,7 @@ import {
 import { CORE, WETH, explorerAddress, getFinalizedBlock, getPublicClient } from "../lib/giwa";
 import { getWalletClient, type WalletState } from "../lib/wallet";
 import { Card, ErrorBox, ProgressBar, Spinner, StatusBadge, TxLink, TxStatus, WalletErrorBox } from "./ui";
+import { TokenIcon } from "./TokenIcon";
 import type { EnrichedLaunch } from "./Explorer";
 
 const WETH_ABI = [
@@ -352,16 +353,19 @@ export function TradePanel({ launch, wallet, onLaunchChange }: TradeProps) {
         {state && meta ? (
           <>
             <div className="token-head">
-              <div>
-                <h3>
-                  {meta.name} <span className="muted">${meta.symbol}</span>
-                </h3>
-                <p className="muted small mono">
-                  Token{" "}
-                  <a href={explorerAddress(state.baseToken)} target="_blank" rel="noreferrer" className="link">
-                    {state.baseToken}
-                  </a>
-                </p>
+              <div className="token-head-main">
+                <TokenIcon address={state.baseToken} size={36} />
+                <div>
+                  <h3>
+                    {meta.name} <span className="muted">${meta.symbol}</span>
+                  </h3>
+                  <p className="muted small mono">
+                    Token{" "}
+                    <a href={explorerAddress(state.baseToken)} target="_blank" rel="noreferrer" className="link">
+                      {state.baseToken}
+                    </a>
+                  </p>
+                </div>
               </div>
               <StatusBadge status={state.status} />
             </div>
