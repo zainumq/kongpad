@@ -12,6 +12,11 @@ import react from "@vitejs/plugin-react";
  * ~128 KB. That constraint does not apply to GitHub Pages, where Actions
  * builds from source with no such limit — so the externalization was
  * reverted on 24 Nov 2026.
+ *
+ * Deploy note (24 Nov 2026): four rapid successive pushes raced each other
+ * at the GitHub Pages deploy step and all four runs failed there with
+ * "No artifacts named 'github-pages'" (build itself passed each time).
+ * This comment re-triggered a clean deploy run.
  */
 export default defineConfig({
   // Relative base so the same build works at a domain root (Vercel) and
