@@ -495,6 +495,28 @@ select.input {
   margin: 4px 0;
 }
 
+.wallet-error {
+  margin: 12px 0;
+}
+
+.wallet-error .error-box {
+  margin: 0 0 8px;
+}
+
+.wallet-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+
+ol.wallet-hint {
+  padding-left: 20px;
+}
+
+.wallet-hint li {
+  margin: 2px 0;
+}
+
 .empty {
   text-align: center;
   padding: 28px 12px;
@@ -611,6 +633,28 @@ select.input {
   .kv dd {
     margin-bottom: 8px;
   }
+}
+
+.rpc-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  background: #fdecea;
+  border: 1px solid #f5b5b0;
+  color: #7a271a;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+}
+
+.rpc-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .rpc-settings {
