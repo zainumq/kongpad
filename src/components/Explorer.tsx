@@ -13,6 +13,7 @@ import {
 import { CORE, DEPLOYMENT_START_BLOCK, WETH, getPublicClient } from "../lib/giwa";
 import { clearLaunchCache, loadLaunchCache, saveLaunchCache } from "../lib/store";
 import { AddressLink, Card, EmptyState, ErrorBox, ProgressBar, Spinner, StatusBadge } from "./ui";
+import { TokenIcon } from "./TokenIcon";
 
 export type EnrichedLaunch = LaunchRecord & {
   meta?: TokenMeta;
@@ -305,14 +306,19 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
               {rows.map((l) => (
                 <tr key={l.curve}>
                   <td>
-                    {l.meta ? (
+                    <span className="token-cell">
+                      <TokenIcon address={l.token} size={26} />
                       <span>
-                        <strong>{l.meta.name}</strong> <span className="muted">${l.meta.symbol}</span>
+                        {l.meta ? (
+                          <span>
+                            <strong>{l.meta.name}</strong> <span className="muted">${l.meta.symbol}</span>
+                          </span>
+                        ) : (
+                          <AddressLink address={l.token} />
+                        )}
+                        <div className="muted small mono">{l.token.slice(0, 10)}…</div>
                       </span>
-                    ) : (
-                      <AddressLink address={l.token} />
-                    )}
-                    <div className="muted small mono">{l.token.slice(0, 10)}…</div>
+                    </span>
                   </td>
                   <td>
                     <AddressLink address={l.curve} />
