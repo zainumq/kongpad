@@ -22,12 +22,21 @@ export type EnrichedLaunch = LaunchRecord & {
 
 const ENRICH_CONCURRENCY = 4;
 
+/**
+ * Numeric scan progress. `scannedTo` is the highest block confirmed scanned
+ * (parallel workers finish ranges out of order, so the raw callback value
+ * is not monotonic — the max is tracked). `found` counts launches found so
+ * far including any loaded from cache.
+ */
+type ScanProgress = { start: bigint; scannedTo: bigint; head: bigint; found: number };
+
 export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => void }) {
   const client = getPublicClient();
   const [launches, setLaunches] = useState<LaunchRecord[]>([]);
   const [enriched, setEnriched] = useState<Map<string, EnrichedLaunch>>(new Map());
   const [scanning, setScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState("");
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [hasScanned, setHasScanned] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [enrichedCount, setEnrichedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +53,22 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
         const cached = forceRescan ? null : loadLaunchCache(CORE.launchFactory);
         const fromBlock = cached ? BigInt(cached.scannedTo) + 1n : DEPLOYMENT_START_BLOCK;
         const existing = cached ? cached.launches : [];
+        if (cached) setHasScanned(true);
         setLaunches(existing);
+        setScanProgress({ start: fromBlock, scannedTo: fromBlock, head: fromBlock, found: existing.length });
         const { launches: fresh, scannedTo } = await discoverLaunches(
           client,
           fromBlock,
-          (to, head, found) => setScanProgress(`Scanning blocks … ${to.toLocaleString()} / ${head.toLocaleString()} · ${found} new`),
+          (to, head, found) =>
+            setScanProgress((prev) => {
+              const base = prev ?? { start: fromBlock, scannedTo: fromBlock, head, found: existing.length };
+              return {
+                start: base.start,
+                scannedTo: to > base.scannedTo ? to : base.scannedTo,
+                head,
+                found: existing.length + found,
+              };
+            }),
         );
         if (abortRef.current) return;
         const byCurve = new Map<string, LaunchRecord>();
@@ -56,7 +76,7 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
         const merged = [...byCurve.values()].sort((a, b) => (a.blockNumber < b.blockNumber ? 1 : -1));
         setLaunches(merged);
         saveLaunchCache({ launches: merged, scannedTo: scannedTo.toString(), factory: CORE.launchFactory, savedAt: Date.now() });
-        setScanProgress("");
+        setHasScanned(true);
       } catch (e) {
         setError(describeError(e));
       } finally {
@@ -151,10 +171,17 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
     [enriched],
   );
 
+  // While the first scan is still running with nothing loaded yet, never
+  // report "0 found" — a new visitor reads that as "no launches exist".
+  const subtitle =
+    scanning && launches.length === 0
+      ? "Still scanning the chain for launches — results appear below as they're found."
+      : `Live launches discovered on-chain from the Ammora V4 factory. ${launches.length} found · ${activeCount} active · ${graduatedCount} graduated`;
+
   return (
     <Card
       title="Explore launches"
-      subtitle={`Live launches discovered on-chain from the Ammora V4 factory. ${launches.length} found · ${activeCount} active · ${graduatedCount} graduated`}
+      subtitle={subtitle}
       actions={
         <>
           <button type="button" className="btn btn-small" disabled={scanning} onClick={() => void scan(false)}>
@@ -176,9 +203,15 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
       }
     >
       {error ? <ErrorBox message={error} onRetry={() => void scan(false)} /> : null}
-      {scanning ? (
+      {scanning && launches.length > 0 ? (
         <p className="muted">
-          <Spinner label={scanProgress || "Scanning factory logs…"} />
+          <Spinner
+            label={
+              scanProgress
+                ? `Scanning blocks … ${scanProgress.scannedTo.toLocaleString()} / ${scanProgress.head.toLocaleString()} · ${scanProgress.found} found`
+                : "Scanning factory logs…"
+            }
+          />
         </p>
       ) : null}
       {enriching ? (
@@ -206,8 +239,36 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
         </select>
       </div>
 
-      {rows.length === 0 && !scanning ? (
-        <EmptyState title="No launches match" body="Try a different search, or launch the first token with the Launch Studio." />
+      {scanning && launches.length === 0 ? (
+        <div className="preview">
+          <p>
+            <Spinner label="Still scanning — launches appear here as they're found." />
+          </p>
+          {scanProgress && scanProgress.head > scanProgress.start ? (
+            <>
+              <ProgressBar
+                value={scanProgress.scannedTo - scanProgress.start}
+                max={scanProgress.head - scanProgress.start}
+                label={`Block ${scanProgress.scannedTo.toLocaleString()} of ${scanProgress.head.toLocaleString()}`}
+              />
+              <p className="muted small">
+                Block {scanProgress.scannedTo.toLocaleString()} / {scanProgress.head.toLocaleString()} ·{" "}
+                {scanProgress.found} launch{scanProgress.found === 1 ? "" : "es"} found so far
+              </p>
+            </>
+          ) : (
+            <p className="muted small">Reading the chain head…</p>
+          )}
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title={launches.length === 0 && hasScanned ? "No launches found yet" : "No launches match"}
+          body={
+            launches.length === 0 && hasScanned
+              ? "The scan finished and no tokens have been launched on this factory yet. Launch the first one with the Launch Studio."
+              : "Try a different search, or launch the first token with the Launch Studio."
+          }
+        />
       ) : (
         <div className="table-wrap">
           <table className="table">
