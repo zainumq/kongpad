@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createWalletClient, custom, type Address, type WalletClient } from "viem";
 import { CHAIN_ID, GIWA_SEPOLIA, EXPLORER_URL, getRpcUrls } from "./giwa";
+import { describeWalletError, withWalletTimeout } from "./walletError";
 
 export type WalletState = {
   address: Address | null;
@@ -82,25 +83,31 @@ export function useWallet() {
     if (!window.ethereum) throw new Error("No injected wallet found");
     const chainHex = `0x${CHAIN_ID.toString(16)}`;
     try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: chainHex }],
-      });
+      // The chain-switch prompt can hang like any wallet request (popup
+      // never appears) — fail visibly instead of hanging forever.
+      await withWalletTimeout(
+        window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: chainHex }],
+        }),
+      );
     } catch (e) {
       const err = e as { code?: number };
       if (err.code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: chainHex,
-              chainName: "GIWA Sepolia",
-              nativeCurrency: { name: "GIWA Sepolia ETH", symbol: "ETH", decimals: 18 },
-              rpcUrls: getRpcUrls(),
-              blockExplorerUrls: [EXPLORER_URL],
-            },
-          ],
-        });
+        await withWalletTimeout(
+          window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: chainHex,
+                chainName: "GIWA Sepolia",
+                nativeCurrency: { name: "GIWA Sepolia ETH", symbol: "ETH", decimals: 18 },
+                rpcUrls: getRpcUrls(),
+                blockExplorerUrls: [EXPLORER_URL],
+              },
+            ],
+          }),
+        );
       } else {
         throw e;
       }
@@ -116,11 +123,11 @@ export function useWallet() {
     setConnecting(true);
     setError(null);
     try {
-      await window.ethereum.request({ method: "eth_requestAccounts" });
+      await withWalletTimeout(window.ethereum.request({ method: "eth_requestAccounts" }));
       await refresh();
       await switchChain();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Wallet connection failed");
+      setError(describeWalletError(e));
     } finally {
       setConnecting(false);
     }
