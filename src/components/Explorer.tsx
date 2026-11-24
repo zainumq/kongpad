@@ -75,6 +75,15 @@ export function Explorer({ onTrade }: { onTrade: (launch: EnrichedLaunch) => voi
                 found: existing.length + found,
               };
             }),
+          // Checkpoint: persist the contiguous scanned prefix as it advances,
+          // so a reload resumes from the checkpoint instead of restarting the
+          // scan. Same cache shape as the completed scan; the final save at
+          // the end of this function still overwrites it with scannedTo=head.
+          (checkpoint) => {
+            const byCurve = new Map<string, LaunchRecord>();
+            for (const l of [...existing, ...checkpoint.launches]) byCurve.set(l.curve.toLowerCase(), l);
+            saveLaunchCache({ launches: [...byCurve.values()], scannedTo: checkpoint.scannedTo.toString(), factory: CORE.launchFactory, savedAt: Date.now() });
+          },
         );
         if (abortRef.current) return;
         const byCurve = new Map<string, LaunchRecord>();
