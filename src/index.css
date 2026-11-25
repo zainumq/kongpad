@@ -659,6 +659,12 @@ ol.wallet-hint {
   .kv dd {
     margin-bottom: 8px;
   }
+
+  /* Mobile nav tabs wrap instead of hiding the last tabs behind a scroll. */
+  .tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
 }
 
 .rpc-banner {
